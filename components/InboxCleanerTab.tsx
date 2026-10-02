@@ -15,9 +15,19 @@ import {
   AlertTriangle,
   Loader2,
   Sparkles,
+  Layers,
+  X,
 } from 'lucide-react';
 import { EmailMetadata, BlockedSenderRecord } from '@/lib/types';
 import { formatBytes } from '@/lib/gmail/parser';
+import {
+  CategoryExplorerWidget,
+} from './CategoryExplorerWidget';
+import {
+  classifyEmailCategory,
+  EmailCategoryId,
+  EMAIL_CATEGORIES,
+} from '@/lib/categories';
 
 interface InboxCleanerTabProps {
   emails: EmailMetadata[];
@@ -57,13 +67,16 @@ export function InboxCleanerTab({
   const [ancientFilterYears, setAncientFilterYears] = useState<'1yr' | '2yrs'>('1yr');
   const [sortField, setSortField] = useState<'date' | 'size'>('date');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [selectedCategory, setSelectedCategory] = useState<EmailCategoryId>('all');
+  const [selectedSenderEmail, setSelectedSenderEmail] = useState<string | null>(null);
+  const [showCategoryWidget, setShowCategoryWidget] = useState(true);
 
   // Set of blocked domains for fast lookup
   const blockedDomainSet = useMemo(() => {
     return new Set(blockedSenders.map((b) => b.domain.toLowerCase()));
   }, [blockedSenders]);
 
-  // Filtered emails based on active filter, search query, and sub-toggles
+  // Filtered emails based on active filter, search query, category, and sender
   const filteredEmails = useMemo(() => {
     return emails.filter((item) => {
       // 1. Text Search Filter
@@ -77,21 +90,28 @@ export function InboxCleanerTab({
         }
       }
 
-      // 2. Category Filter
+      // 2. Main KPI Category Filter
       if (activeFilter === 'heavy_5mb' || activeFilter === 'heavy') {
-        return heavyFilterSize === '10mb' ? item.isHeavy10MB : item.isHeavy5MB;
+        if (heavyFilterSize === '10mb' ? !item.isHeavy10MB : !item.isHeavy5MB) return false;
+      } else if (activeFilter === 'mass_notifications') {
+        if (!item.isMassNotification) return false;
+      } else if (activeFilter === 'ancient_1yr' || activeFilter === 'ancient') {
+        if (ancientFilterYears === '2yrs' ? !item.isAncient2Years : !item.isAncient1Year) return false;
+      } else if (activeFilter === 'unsubscribable') {
+        if (!item.hasUnsubscribe) return false;
+      } else if (activeFilter === 'blocked') {
+        if (!blockedDomainSet.has(item.senderDomain.toLowerCase())) return false;
       }
-      if (activeFilter === 'mass_notifications') {
-        return item.isMassNotification;
+
+      // 3. Category Matrix filter
+      if (selectedCategory !== 'all') {
+        const cat = classifyEmailCategory(item);
+        if (cat !== selectedCategory) return false;
       }
-      if (activeFilter === 'ancient_1yr' || activeFilter === 'ancient') {
-        return ancientFilterYears === '2yrs' ? item.isAncient2Years : item.isAncient1Year;
-      }
-      if (activeFilter === 'unsubscribable') {
-        return item.hasUnsubscribe;
-      }
-      if (activeFilter === 'blocked') {
-        return blockedDomainSet.has(item.senderDomain.toLowerCase());
+
+      // 4. Sender Matrix filter
+      if (selectedSenderEmail) {
+        if (item.senderEmail.toLowerCase() !== selectedSenderEmail.toLowerCase()) return false;
       }
 
       return true;
@@ -109,9 +129,22 @@ export function InboxCleanerTab({
     heavyFilterSize,
     ancientFilterYears,
     blockedDomainSet,
+    selectedCategory,
+    selectedSenderEmail,
     sortField,
     sortOrder,
   ]);
+
+  // Handle select all emails from specific sender
+  const handleSelectAllFromSender = (emailIds: string[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of emailIds) {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   // Selection handlers
   const handleToggleSelect = (id: string) => {
@@ -164,20 +197,60 @@ export function InboxCleanerTab({
 
   return (
     <div className="space-y-4">
+      {/* Category & Sender Explorer Widget */}
+      {showCategoryWidget && (
+        <CategoryExplorerWidget
+          emails={emails}
+          blockedSenders={blockedSenders}
+          selectedCategory={selectedCategory}
+          onSelectCategory={(cat) => setSelectedCategory(cat)}
+          selectedSenderEmail={selectedSenderEmail}
+          onSelectSenderEmail={(sender) => setSelectedSenderEmail(sender)}
+          onSelectAllFromSender={handleSelectAllFromSender}
+          onBlockSender={onBlockSender}
+          onUnsubscribe={onUnsubscribe}
+          selectedEmailIds={selectedIds}
+          onBatchTrashSelected={() => setShowConfirmModal(true)}
+        />
+      )}
+
       {/* Controls Bar: Filters & Sub-toggles */}
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur-md">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Main Filter Chips */}
           <div className="flex flex-wrap items-center gap-1.5">
             <button
-              onClick={() => setActiveFilter('all')}
+              onClick={() => {
+                setActiveFilter('all');
+                setSelectedCategory('all');
+                setSelectedSenderEmail(null);
+              }}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                activeFilter === 'all'
+                activeFilter === 'all' && selectedCategory === 'all' && !selectedSenderEmail
                   ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
               All ({emails.length})
+            </button>
+
+            {/* Category Matrix Widget Toggle Button */}
+            <button
+              onClick={() => setShowCategoryWidget(!showCategoryWidget)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                showCategoryWidget || selectedCategory !== 'all' || selectedSenderEmail
+                  ? 'bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-500 text-white shadow-sm shadow-indigo-600/30'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="Toggle Category & Sender Explorer Widget"
+            >
+              <Layers className="h-3.5 w-3.5 text-cyan-300" />
+              <span>Category Matrix</span>
+              {(selectedCategory !== 'all' || selectedSenderEmail) && (
+                <span className="rounded-full bg-cyan-400 px-1.5 py-0.2 text-[9px] font-black text-slate-950">
+                  FILTERED
+                </span>
+              )}
             </button>
 
             <button
@@ -453,12 +526,38 @@ export function InboxCleanerTab({
                   {/* Content snippet */}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                      <span className="text-xs font-bold text-slate-200 truncate max-w-[200px]">
+                      <button
+                        onClick={() => {
+                          setSelectedSenderEmail(item.senderEmail);
+                          setShowCategoryWidget(true);
+                        }}
+                        className="text-xs font-bold text-slate-200 hover:text-cyan-300 transition truncate max-w-[200px] text-left"
+                        title="Filter to this sender"
+                      >
                         {item.senderName}
-                      </span>
+                      </button>
                       <span className="text-[10px] text-slate-400 font-mono">
                         @{item.senderDomain}
                       </span>
+
+                      {/* Category Badge */}
+                      {(() => {
+                        const cat = classifyEmailCategory(item);
+                        const catDef = EMAIL_CATEGORIES.find((c) => c.id === cat);
+                        if (!catDef || catDef.id === 'all') return null;
+                        return (
+                          <button
+                            onClick={() => {
+                              setSelectedCategory(cat);
+                              setShowCategoryWidget(true);
+                            }}
+                            className={`rounded-md border px-1.5 py-0.2 text-[9px] font-semibold transition hover:opacity-80 ${catDef.badgeBorder} ${catDef.color} bg-slate-800/80`}
+                            title={`Filter to ${catDef.label}`}
+                          >
+                            {catDef.shortLabel}
+                          </button>
+                        );
+                      })()}
 
                       {/* Status Badges */}
                       {item.isHeavy10MB ? (
