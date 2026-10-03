@@ -76,6 +76,7 @@ export function CategoryExplorerWidget({
   const [unsubLoading, setUnsubLoading] = useState<string | null>(null);
   const [blockLoading, setBlockLoading] = useState<string | null>(null);
   const [bulkTrashLoading, setBulkTrashLoading] = useState(false);
+  const [bulkCombinedLoading, setBulkCombinedLoading] = useState(false);
   const [bulkUnsubLoading, setBulkUnsubLoading] = useState(false);
   const [bulkUnsubProgress, setBulkUnsubProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -304,7 +305,56 @@ export function CategoryExplorerWidget({
               </button>
             )}
 
-            {/* Trash ALL in current filter view — directly, no pre-select needed */}
+            {/* Combined Unsub & Trash ALL (shown when there are both emails to trash AND senders to unsubscribe) */}
+            {onBatchTrash && onUnsubscribe && (() => {
+              const targetIds = selectedSenderEmail && activeSender
+                ? activeSender.emailIds
+                : categoryEmails.map((e) => e.id);
+              const targetEmails = sendersList
+                .filter((s) => s.hasUnsubscribe)
+                .map((s) => {
+                  const senderEmails = emailsBySender.get(s.senderEmail.toLowerCase()) || [];
+                  return senderEmails.find((e) => e.hasUnsubscribe && e.unsubscribeOptions);
+                })
+                .filter(Boolean) as EmailMetadata[];
+
+              if (targetIds.length === 0 || targetEmails.length === 0) return null;
+              if (selectedCategory === 'all' && !selectedSenderEmail) return null;
+
+              return (
+                <button
+                  onClick={async () => {
+                    setBulkCombinedLoading(true);
+                    try {
+                      for (let i = 0; i < targetEmails.length; i++) {
+                        await onUnsubscribe(targetEmails[i]);
+                      }
+                      await onBatchTrash(targetIds);
+                    } finally {
+                      setBulkCombinedLoading(false);
+                    }
+                  }}
+                  disabled={bulkCombinedLoading || bulkTrashLoading}
+                  className="flex items-center gap-1.5 rounded-lg border border-violet-500/40 bg-gradient-to-r from-emerald-500/20 via-violet-600/20 to-rose-500/20 px-2.5 py-1 text-xs font-bold text-violet-200 hover:from-emerald-500/30 hover:to-rose-500/30 hover:border-violet-400/60 transition shadow-sm disabled:opacity-50"
+                  title={`Unsubscribe from ${targetEmails.length} sender(s) AND move all ${targetIds.length} emails to Trash`}
+                >
+                  {bulkCombinedLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-violet-300" />
+                  ) : (
+                    <span className="flex items-center gap-0.5">
+                      <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      <span className="text-slate-400">+</span>
+                      <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+                    </span>
+                  )}
+                  <span>
+                    {bulkCombinedLoading ? 'Unsubbing & Trashing…' : `Unsub & Trash all ${targetIds.length}`}
+                  </span>
+                </button>
+              );
+            })()}
+
+            {/* Trash ALL in current filter view without unsubscribing */}
             {onBatchTrash && (() => {
               // Determine which email IDs to trash: sender filter > category filter
               const targetIds = selectedSenderEmail && activeSender
@@ -317,9 +367,9 @@ export function CategoryExplorerWidget({
                     setBulkTrashLoading(true);
                     try { await onBatchTrash(targetIds); } finally { setBulkTrashLoading(false); }
                   }}
-                  disabled={bulkTrashLoading}
+                  disabled={bulkTrashLoading || bulkCombinedLoading}
                   className="flex items-center gap-1.5 rounded-lg border border-rose-600/40 bg-rose-600/20 px-2.5 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 hover:border-rose-500/60 transition shadow-sm disabled:opacity-50"
-                  title={`Immediately move all ${targetIds.length} emails to Trash (no pre-select needed)`}
+                  title={`Immediately move all ${targetIds.length} emails to Trash without unsubscribing`}
                 >
                   {bulkTrashLoading
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
@@ -613,8 +663,8 @@ export function CategoryExplorerWidget({
                               );
                             })()}
 
-                            {/* Trash only (shown when unsubscribe is NOT available) */}
-                            {onBatchTrash && (!sender.hasUnsubscribe || !onUnsubscribe) && (() => {
+                            {/* Trash all without unsubscribing — always available */}
+                            {onBatchTrash && (() => {
                               const key = '__trash__' + sender.senderEmail;
                               const isLoading = blockLoading === key;
                               return (
@@ -626,7 +676,11 @@ export function CategoryExplorerWidget({
                                   }}
                                   disabled={isLoading}
                                   className="flex items-center gap-1 rounded-md border border-rose-600/30 bg-rose-600/15 px-2 py-0.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-600/25 hover:border-rose-500/50 transition disabled:opacity-40"
-                                  title={`Move all ${sender.count} emails from ${sender.senderName} to Trash`}
+                                  title={
+                                    sender.hasUnsubscribe
+                                      ? `Move all ${sender.count} emails from ${sender.senderName} to Trash without unsubscribing`
+                                      : `Move all ${sender.count} emails from ${sender.senderName} to Trash`
+                                  }
                                 >
                                   {isLoading
                                     ? <span className="h-3 w-3 border border-rose-400 border-t-transparent rounded-full animate-spin shrink-0" />
@@ -636,8 +690,8 @@ export function CategoryExplorerWidget({
                               );
                             })()}
 
-                            {/* Unsubscribe only (shown when trash is NOT available) */}
-                            {!onBatchTrash && sender.hasUnsubscribe && onUnsubscribe && (() => {
+                            {/* Unsubscribe only (without trashing emails) */}
+                            {sender.hasUnsubscribe && onUnsubscribe && (() => {
                               const senderEmails = emailsBySender.get(sender.senderEmail.toLowerCase()) || [];
                               const unsubEmail = senderEmails.find((e) => e.hasUnsubscribe && e.unsubscribeOptions);
                               if (!unsubEmail) return null;
@@ -651,7 +705,7 @@ export function CategoryExplorerWidget({
                                   }}
                                   disabled={isLoading}
                                   className="flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400/40 transition disabled:opacity-40"
-                                  title={`Send unsubscribe request to ${sender.senderDomain}`}
+                                  title={`Send unsubscribe request to ${sender.senderDomain} (keep emails in inbox)`}
                                 >
                                   {isLoading
                                     ? <span className="h-3 w-3 border border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0" />
