@@ -198,7 +198,7 @@ SESSION_SECRET="super-secret-key-at-least-32-characters"`;
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold text-white">HIBP OSINT</span>
+              <span className="text-xs font-bold text-white">HIBP Breach Scanner</span>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                   hibpConfigured

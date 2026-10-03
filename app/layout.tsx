@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MailCleaner & OSINT Hub | Inbox Optimization & Account Discovery",
+  title: "MailCleaner | Inbox Optimization & Digital Footprint Hub",
   description:
     "Private, high-performance personal dashboard for bulk Gmail cleaning, automated 1-click unsubscribing, Have I Been Pwned breach inspection, and Chrome password account discovery.",
 };

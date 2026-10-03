@@ -183,7 +183,7 @@ export function OsintTab({
               <ShieldAlert className="h-6 w-6" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Digital Footprint & Account Discovery (OSINT)</h2>
+              <h2 className="text-base font-bold text-white">Digital Footprint & Account Discovery</h2>
               <p className="text-xs text-slate-300 max-w-xl mt-0.5">
                 Audit online accounts via Google Chrome exported password archives and Have I Been Pwned breach
                 intelligence. Cross-referenced with the <strong className="text-cyan-400">JustDelete.me</strong> directory

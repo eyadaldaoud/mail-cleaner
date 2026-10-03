@@ -209,6 +209,7 @@ export function InboxCleanerTab({
           onSelectAllFromSender={handleSelectAllFromSender}
           onBlockSender={onBlockSender}
           onUnsubscribe={onUnsubscribe}
+          onBatchTrash={onBatchTrash}
           selectedEmailIds={selectedIds}
           onBatchTrashSelected={() => setShowConfirmModal(true)}
         />

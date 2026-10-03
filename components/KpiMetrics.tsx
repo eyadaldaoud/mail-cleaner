@@ -92,7 +92,7 @@ export function KpiMetrics({
     },
     {
       id: 'osint_breached',
-      title: 'OSINT Footprint',
+      title: 'Digital Footprint',
       value: accounts.length > 0 ? accounts.length.toLocaleString() : 'Ready',
       subtext: totalBreached > 0 ? `${totalBreached} compromised` : 'Password CSV & HIBP',
       icon: AlertTriangle,

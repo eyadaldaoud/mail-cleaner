@@ -46,7 +46,7 @@ export function Navbar({
   const tabs = [
     { id: 'cleaner', label: 'Cleaner', icon: Mail },
     { id: 'unsubscriber', label: 'Unsubscribe', icon: Shield },
-    { id: 'osint', label: 'OSINT', icon: KeyRound },
+    { id: 'osint', label: 'Digital Footprint', icon: KeyRound },
     { id: 'blocklist', label: 'Blocklist', icon: Database },
   ] as const;
 
@@ -67,7 +67,7 @@ export function Navbar({
               Mail<span className="text-cyan-400">Cleaner</span>
             </span>
             <span className="hidden sm:inline rounded-md border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-indigo-300 uppercase">
-              OSINT
+              SECURITY
             </span>
           </div>
 

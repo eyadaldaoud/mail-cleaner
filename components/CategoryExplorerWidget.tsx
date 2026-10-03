@@ -16,6 +16,8 @@ import {
   Search,
   Ban,
   ShieldCheck,
+  Trash2,
+  Loader2,
   X,
   Layers,
 } from 'lucide-react';
@@ -38,6 +40,7 @@ interface CategoryExplorerWidgetProps {
   onSelectAllFromSender?: (emailIds: string[]) => void;
   onBlockSender?: (domain: string, senderEmail?: string) => Promise<void>;
   onUnsubscribe?: (email: EmailMetadata) => Promise<{ success: boolean; message: string }>;
+  onBatchTrash?: (ids: string[]) => Promise<void>;
   selectedEmailIds?: Set<string>;
   onBatchTrashSelected?: () => void;
 }
@@ -63,6 +66,7 @@ export function CategoryExplorerWidget({
   onSelectAllFromSender,
   onBlockSender,
   onUnsubscribe,
+  onBatchTrash,
   selectedEmailIds,
   onBatchTrashSelected,
 }: CategoryExplorerWidgetProps) {
@@ -71,6 +75,9 @@ export function CategoryExplorerWidget({
   const [showAllSenders, setShowAllSenders] = useState(false);
   const [unsubLoading, setUnsubLoading] = useState<string | null>(null);
   const [blockLoading, setBlockLoading] = useState<string | null>(null);
+  const [bulkTrashLoading, setBulkTrashLoading] = useState(false);
+  const [bulkUnsubLoading, setBulkUnsubLoading] = useState(false);
+  const [bulkUnsubProgress, setBulkUnsubProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Build quick lookup: senderEmail -> emails with unsubscribe options
   const emailsBySender = useMemo(() => {
@@ -178,7 +185,7 @@ export function CategoryExplorerWidget({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl shadow-xl transition-all duration-300 overflow-hidden">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl shadow-xl transition-all duration-300">
       {/* Top Banner Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 px-4 py-3 bg-slate-950/40">
         <div className="flex items-center gap-2.5">
@@ -230,56 +237,145 @@ export function CategoryExplorerWidget({
         </div>
       </div>
 
-      {/* Active Filter Pill Bar (Shown even if collapsed so user knows why list is filtered) */}
-      {(selectedCategory !== 'all' || selectedSenderEmail) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-indigo-950/30 border-b border-indigo-900/40 text-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-slate-400 font-medium">Filtering by:</span>
+      {/* Active Filter Pill Bar + Bulk Action Bar */}
+      {(selectedCategory !== 'all' || selectedSenderEmail || (selectedEmailIds && selectedEmailIds.size > 0)) && (
+        <div className="border-b border-indigo-900/40 bg-indigo-950/30">
+          {/* Filter pills row */}
+          {(selectedCategory !== 'all' || selectedSenderEmail) && (
+            <div className="flex flex-wrap items-center gap-2 px-4 pt-2.5 pb-1.5 text-xs">
+              <span className="text-slate-400 font-medium">Filtering by:</span>
 
-            {selectedCategory !== 'all' && (
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/40 px-2.5 py-0.5 font-semibold text-indigo-200">
-                <span>{activeCategoryDef.label}</span>
-                <span className="text-[10px] text-indigo-300 font-mono">
-                  ({categoryEmails.length})
+              {selectedCategory !== 'all' && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/40 px-2.5 py-0.5 font-semibold text-indigo-200">
+                  <span>{activeCategoryDef.label}</span>
+                  <span className="text-[10px] text-indigo-300 font-mono">
+                    ({categoryEmails.length})
+                  </span>
+                  <button
+                    onClick={() => onSelectCategory('all')}
+                    className="hover:text-white ml-0.5"
+                    title="Remove category filter"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 </span>
-                <button
-                  onClick={() => onSelectCategory('all')}
-                  className="hover:text-white ml-0.5"
-                  title="Remove category filter"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
+              )}
 
-            {selectedSenderEmail && (
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 px-2.5 py-0.5 font-semibold text-cyan-200">
-                <span className="truncate max-w-[200px]">
-                  Sender: {activeSender?.senderName || selectedSenderEmail}
+              {selectedSenderEmail && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 px-2.5 py-0.5 font-semibold text-cyan-200">
+                  <span className="truncate max-w-[200px]">
+                    Sender: {activeSender?.senderName || selectedSenderEmail}
+                  </span>
+                  <span className="text-[10px] text-cyan-300 font-mono">
+                    ({activeSender?.count || 0})
+                  </span>
+                  <button
+                    onClick={() => onSelectSenderEmail(null)}
+                    className="hover:text-white ml-0.5"
+                    title="Remove sender filter"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 </span>
-                <span className="text-[10px] text-cyan-300 font-mono">
-                  ({activeSender?.count || 0})
-                </span>
-                <button
-                  onClick={() => onSelectSenderEmail(null)}
-                  className="hover:text-white ml-0.5"
-                  title="Remove sender filter"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-          </div>
-
-          {activeSender && onSelectAllFromSender && (
-            <button
-              onClick={() => onSelectAllFromSender(activeSender.emailIds)}
-              className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500 transition shadow-sm"
-            >
-              <CheckSquare className="h-3 w-3" />
-              <span>Select all {activeSender.count} from this sender</span>
-            </button>
+              )}
+            </div>
           )}
+
+          {/* Bulk Action Buttons Bar */}
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2.5 pt-1">
+            {/* Scope label */}
+            <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider shrink-0">
+              {selectedSenderEmail
+                ? `${activeSender?.count ?? 0} emails from sender:`
+                : selectedCategory !== 'all'
+                ? `${categoryEmails.length} emails in category:`
+                : `${selectedEmailIds?.size ?? 0} selected:`}
+            </span>
+
+            {/* Trash selected (only when something is actually selected) */}
+            {selectedEmailIds && selectedEmailIds.size > 0 && onBatchTrashSelected && (
+              <button
+                onClick={onBatchTrashSelected}
+                className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/25 hover:border-rose-400/50 transition shadow-sm"
+                title={`Move ${selectedEmailIds.size} selected emails to Trash`}
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                <span>Trash {selectedEmailIds.size} selected</span>
+              </button>
+            )}
+
+            {/* Trash ALL in current filter view — directly, no pre-select needed */}
+            {onBatchTrash && (() => {
+              // Determine which email IDs to trash: sender filter > category filter
+              const targetIds = selectedSenderEmail && activeSender
+                ? activeSender.emailIds
+                : categoryEmails.map((e) => e.id);
+              if (targetIds.length === 0) return null;
+              return (
+                <button
+                  onClick={async () => {
+                    setBulkTrashLoading(true);
+                    try { await onBatchTrash(targetIds); } finally { setBulkTrashLoading(false); }
+                  }}
+                  disabled={bulkTrashLoading}
+                  className="flex items-center gap-1.5 rounded-lg border border-rose-600/40 bg-rose-600/20 px-2.5 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-600/30 hover:border-rose-500/60 transition shadow-sm disabled:opacity-50"
+                  title={`Immediately move all ${targetIds.length} emails to Trash (no pre-select needed)`}
+                >
+                  {bulkTrashLoading
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    : <Trash2 className="h-3.5 w-3.5 shrink-0" />}
+                  <span>
+                    {bulkTrashLoading ? 'Trashing…' : `Trash all ${targetIds.length}`}
+                  </span>
+                </button>
+              );
+            })()}
+
+            {/* Unsubscribe ALL — fires sequentially for all senders with unsub options */}
+            {onUnsubscribe && (() => {
+              // Collect one unsub email per sender from current view
+              const targetEmails = sendersList
+                .filter((s) => s.hasUnsubscribe)
+                .map((s) => {
+                  const senderEmails = emailsBySender.get(s.senderEmail.toLowerCase()) || [];
+                  return senderEmails.find((e) => e.hasUnsubscribe && e.unsubscribeOptions);
+                })
+                .filter(Boolean) as EmailMetadata[];
+
+              // Only show when scoped to category or sender
+              if (targetEmails.length === 0 || selectedCategory === 'all' && !selectedSenderEmail) return null;
+
+              return (
+                <button
+                  onClick={async () => {
+                    setBulkUnsubLoading(true);
+                    setBulkUnsubProgress({ done: 0, total: targetEmails.length });
+                    try {
+                      for (let i = 0; i < targetEmails.length; i++) {
+                        await onUnsubscribe(targetEmails[i]);
+                        setBulkUnsubProgress({ done: i + 1, total: targetEmails.length });
+                      }
+                    } finally {
+                      setBulkUnsubLoading(false);
+                      setTimeout(() => setBulkUnsubProgress(null), 2500);
+                    }
+                  }}
+                  disabled={bulkUnsubLoading}
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400/50 transition shadow-sm disabled:opacity-50"
+                  title={`Send unsubscribe to all ${targetEmails.length} senders in this view`}
+                >
+                  {bulkUnsubLoading
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    : <ShieldCheck className="h-3.5 w-3.5 shrink-0" />}
+                  <span>
+                    {bulkUnsubLoading && bulkUnsubProgress
+                      ? `Unsubbing ${bulkUnsubProgress.done}/${bulkUnsubProgress.total}…`
+                      : `Unsub all ${targetEmails.length} senders`}
+                  </span>
+                </button>
+              );
+            })()}
+          </div>
         </div>
       )}
 
@@ -484,8 +580,64 @@ export function CategoryExplorerWidget({
                               </button>
                             )}
 
-                            {/* Unsubscribe */}
-                            {sender.hasUnsubscribe && onUnsubscribe && (() => {
+                            {/* Combined Trash + Unsubscribe (shown when BOTH are available — the recommended one-click cleanup) */}
+                            {onBatchTrash && sender.hasUnsubscribe && onUnsubscribe && (() => {
+                              const senderEmails = emailsBySender.get(sender.senderEmail.toLowerCase()) || [];
+                              const unsubEmail = senderEmails.find((e) => e.hasUnsubscribe && e.unsubscribeOptions);
+                              if (!unsubEmail) return null;
+                              const key = '__trashAndUnsub__' + sender.senderEmail;
+                              const isLoading = blockLoading === key;
+                              return (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    setBlockLoading(key);
+                                    try {
+                                      // 1. Unsubscribe first
+                                      await onUnsubscribe(unsubEmail);
+                                      // 2. Then trash all emails from this sender
+                                      await onBatchTrash(sender.emailIds);
+                                    } finally {
+                                      setBlockLoading(null);
+                                    }
+                                  }}
+                                  disabled={isLoading}
+                                  className="flex items-center gap-1 rounded-md border border-violet-500/40 bg-gradient-to-r from-emerald-500/15 to-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-violet-200 hover:from-emerald-500/25 hover:to-rose-500/25 hover:border-violet-400/60 transition disabled:opacity-40 shadow-sm"
+                                  title={`Unsubscribe from ${sender.senderDomain} AND move all ${sender.count} emails to Trash`}
+                                >
+                                  {isLoading
+                                    ? <span className="h-3 w-3 border border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                                    : <span className="flex items-center gap-0.5"><ShieldCheck className="h-3 w-3 shrink-0 text-emerald-400" /><span className="text-slate-400">+</span><Trash2 className="h-3 w-3 shrink-0 text-rose-400" /></span>}
+                                  <span>{isLoading ? 'Working…' : `Unsub & Trash all ${sender.count}`}</span>
+                                </button>
+                              );
+                            })()}
+
+                            {/* Trash only (shown when unsubscribe is NOT available) */}
+                            {onBatchTrash && (!sender.hasUnsubscribe || !onUnsubscribe) && (() => {
+                              const key = '__trash__' + sender.senderEmail;
+                              const isLoading = blockLoading === key;
+                              return (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    setBlockLoading(key);
+                                    try { await onBatchTrash(sender.emailIds); } finally { setBlockLoading(null); }
+                                  }}
+                                  disabled={isLoading}
+                                  className="flex items-center gap-1 rounded-md border border-rose-600/30 bg-rose-600/15 px-2 py-0.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-600/25 hover:border-rose-500/50 transition disabled:opacity-40"
+                                  title={`Move all ${sender.count} emails from ${sender.senderName} to Trash`}
+                                >
+                                  {isLoading
+                                    ? <span className="h-3 w-3 border border-rose-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                                    : <Trash2 className="h-3 w-3 shrink-0" />}
+                                  <span>{isLoading ? 'Trashing…' : `Trash all ${sender.count}`}</span>
+                                </button>
+                              );
+                            })()}
+
+                            {/* Unsubscribe only (shown when trash is NOT available) */}
+                            {!onBatchTrash && sender.hasUnsubscribe && onUnsubscribe && (() => {
                               const senderEmails = emailsBySender.get(sender.senderEmail.toLowerCase()) || [];
                               const unsubEmail = senderEmails.find((e) => e.hasUnsubscribe && e.unsubscribeOptions);
                               if (!unsubEmail) return null;
@@ -518,11 +670,11 @@ export function CategoryExplorerWidget({
                                   try { await onBlockSender(sender.senderDomain, sender.senderEmail); } finally { setBlockLoading(null); }
                                 }}
                                 disabled={blockLoading === sender.senderEmail}
-                                className="flex items-center gap-1 rounded-md border border-rose-500/25 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/20 hover:border-rose-400/40 transition disabled:opacity-40"
+                                className="flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/40 transition disabled:opacity-40"
                                 title={`Block all future emails from @${sender.senderDomain}`}
                               >
                                 {blockLoading === sender.senderEmail
-                                  ? <span className="h-3 w-3 border border-rose-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                                  ? <span className="h-3 w-3 border border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />
                                   : <Ban className="h-3 w-3 shrink-0" />}
                                 <span>{blockLoading === sender.senderEmail ? 'Blocking…' : 'Block domain'}</span>
                               </button>
