@@ -16,6 +16,7 @@ import {
   Loader2,
   Sparkles,
   Layers,
+  Zap,
   X,
 } from 'lucide-react';
 import { EmailMetadata, BlockedSenderRecord } from '@/lib/types';
@@ -43,6 +44,9 @@ interface InboxCleanerTabProps {
   isLoadingMore?: boolean;
   fetchLimit?: number;
   onFetchLimitChange?: (limit: number) => void;
+  onOpenWizard?: () => void;
+  onOpenAutoRules?: () => void;
+  autoRulesCount?: number;
 }
 
 export function InboxCleanerTab({
@@ -59,9 +63,13 @@ export function InboxCleanerTab({
   isLoadingMore,
   fetchLimit = 100,
   onFetchLimitChange,
+  onOpenWizard,
+  onOpenAutoRules,
+  autoRulesCount = 0,
 }: InboxCleanerTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [heavyFilterSize, setHeavyFilterSize] = useState<'5mb' | '10mb'>('5mb');
   const [ancientFilterYears, setAncientFilterYears] = useState<'1yr' | '2yrs'>('1yr');
@@ -190,13 +198,78 @@ export function InboxCleanerTab({
 
   const executeBatchTrash = async () => {
     if (selectedIds.size === 0) return;
-    await onBatchTrash(Array.from(selectedIds));
-    setSelectedIds(new Set());
+    const idsToRemove = Array.from(selectedIds);
+    setRemovingIds(new Set(idsToRemove));
     setShowConfirmModal(false);
+    // Allow smooth row-exit animation to complete before removing from state
+    await new Promise((resolve) => setTimeout(resolve, 380));
+    await onBatchTrash(idsToRemove);
+    setSelectedIds(new Set());
+    setRemovingIds(new Set());
+  };
+
+  const handleTrashSingle = async (id: string) => {
+    setRemovingIds((prev) => new Set(prev).add(id));
+    await new Promise((resolve) => setTimeout(resolve, 380));
+    await onBatchTrash([id]);
+    setRemovingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   return (
     <div className="space-y-4">
+      {/* Onboarding Cleaning Wizard Hero Prompt Banner */}
+      {emails.length > 0 && onOpenWizard && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/30 to-slate-900/60 p-4 shadow-xl shadow-indigo-950/20 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-600 text-white shadow-lg shadow-indigo-600/30 animate-pulse-glow">
+              <Sparkles className="h-5 w-5 text-amber-200" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide">
+                  Step-by-Step Cleaning Wizard
+                </h3>
+                <span className="rounded-full bg-indigo-500/20 border border-indigo-500/40 px-2 py-0.2 text-[9px] font-bold text-indigo-300">
+                  NEW
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Audit cluttered categories, 1-click unsubscribe, and set auto-delete patterns for future syncs.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+            {onOpenAutoRules && (
+              <button
+                onClick={onOpenAutoRules}
+                className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition"
+                title="Manage automated sync rules"
+              >
+                <Zap className="h-3.5 w-3.5 text-amber-400" />
+                <span>Auto-Rules</span>
+                {autoRulesCount > 0 && (
+                  <span className="rounded-full bg-amber-500/30 px-1.5 py-0.2 text-[9px] font-bold text-amber-200">
+                    {autoRulesCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={onOpenWizard}
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-500 px-4 py-1.5 text-xs font-bold text-white shadow-md shadow-indigo-600/30 hover:brightness-110 transition"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-amber-200" />
+              <span>Launch Clean Wizard &rarr;</span>
+            </button>
+          </div>
+        </div>
+      )}
       {/* Category & Sender Explorer Widget */}
       {showCategoryWidget && (
         <CategoryExplorerWidget
@@ -234,6 +307,18 @@ export function InboxCleanerTab({
             >
               All ({emails.length})
             </button>
+
+            {/* Quick Clean Wizard Button */}
+            {onOpenWizard && (
+              <button
+                onClick={onOpenWizard}
+                className="flex items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-3 py-1.5 text-xs font-bold text-indigo-300 hover:bg-indigo-500/25 transition shadow-sm"
+                title="Launch step-by-step cleaning wizard"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                <span>Clean Wizard</span>
+              </button>
+            )}
 
             {/* Category Matrix Widget Toggle Button */}
             <button
@@ -482,11 +567,14 @@ export function InboxCleanerTab({
           filteredEmails.map((item) => {
             const isSelected = selectedIds.has(item.id);
             const isBlocked = blockedDomainSet.has(item.senderDomain.toLowerCase());
+            const isRemoving = removingIds.has(item.id);
 
             return (
               <div
                 key={item.id}
                 className={`group flex items-start sm:items-center justify-between gap-3 rounded-xl border p-3 transition-all ${
+                  isRemoving ? 'animate-row-exit' : ''
+                } ${
                   isSelected
                     ? 'border-indigo-500/60 bg-indigo-950/20 shadow-sm shadow-indigo-500/10'
                     : isBlocked
@@ -655,10 +743,10 @@ export function InboxCleanerTab({
                     </button>
                   )}
 
-                  {/* Single Trash Action */}
+                  {/* Single Trash Action with smooth removal animation */}
                   <button
-                    onClick={() => onBatchTrash([item.id])}
-                    disabled={isProcessing}
+                    onClick={() => handleTrashSingle(item.id)}
+                    disabled={isProcessing || isRemoving}
                     title="Trash this email"
                     className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 text-slate-400 hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-400 transition disabled:opacity-50"
                   >

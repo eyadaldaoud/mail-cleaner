@@ -9,6 +9,14 @@ import { OsintTab } from '@/components/OsintTab';
 import { BlocklistTab } from '@/components/BlocklistTab';
 import { SetupGuideModal } from '@/components/SetupGuideModal';
 import { FetchProgress, FetchProgressState } from '@/components/FetchProgress';
+import { CleaningWizardModal } from '@/components/CleaningWizardModal';
+import { AutoRulesModal } from '@/components/AutoRulesModal';
+import {
+  evaluateAutoDeleteRules,
+  recordRuleDeletions,
+  getAutoRules,
+  RuleMatchResult,
+} from '@/lib/autoRules';
 import {
   AuthSession,
   EmailMetadata,
@@ -30,6 +38,9 @@ export default function DashboardPage() {
   >('cleaner');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isAutoRulesOpen, setIsAutoRulesOpen] = useState(false);
+  const [autoRulesCount, setAutoRulesCount] = useState(0);
 
   // Data states
   const [session, setSession] = useState<AuthSession>({
@@ -74,6 +85,47 @@ export default function DashboardPage() {
       setTimeout(() => setToast(null), 4500);
     },
     []
+  );
+
+  const refreshAutoRulesCount = useCallback(() => {
+    setAutoRulesCount(getAutoRules().filter((r) => r.enabled).length);
+  }, []);
+
+  useEffect(() => {
+    refreshAutoRulesCount();
+  }, [refreshAutoRulesCount]);
+
+  // Execute Auto-Delete Rules on newly synced emails
+  const runAutoClean = useCallback(
+    async (matches: RuleMatchResult) => {
+      const ids = matches.matchedEmailIds;
+      if (ids.length === 0) return;
+
+      try {
+        const res = await fetch('/api/gmail/batch-trash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          setEmails((prev) => prev.filter((e) => !ids.includes(e.id)));
+          const ruleCounts: Record<string, number> = {};
+          for (const summary of matches.ruleSummary) {
+            ruleCounts[summary.rule.id] = summary.count;
+          }
+          recordRuleDeletions(ruleCounts);
+          refreshAutoRulesCount();
+          showToast(
+            `⚡ Auto-Clean: Automatically trashed ${ids.length} new email(s) matching your saved rules!`,
+            'success'
+          );
+        }
+      } catch (err) {
+        console.error('Auto clean error:', err);
+      }
+    },
+    [showToast, refreshAutoRulesCount]
   );
 
   // Fetch all initial data
@@ -135,6 +187,12 @@ export default function DashboardPage() {
             if (data.emails && data.emails.length > 0) {
               setEmails(data.emails);
               setNextPageToken(data.nextPageToken);
+
+              // Automatically evaluate and execute active auto-delete rules on new batch
+              const autoMatches = evaluateAutoDeleteRules(data.emails);
+              if (autoMatches.matchedEmailIds.length > 0) {
+                runAutoClean(autoMatches);
+              }
             } else if (data.apiError && !data.emails?.length) {
               showToast(data.apiError || 'Sync returned no emails — keeping existing data.', 'info');
             } else if (data.emails?.length === 0 && !data.apiError) {
@@ -393,6 +451,12 @@ export default function DashboardPage() {
         });
         setNextPageToken(data.nextPageToken);
         showToast(`Loaded ${data.emails.length} additional emails!`, 'success');
+
+        // Automatically evaluate and execute active auto-delete rules on incremental batch
+        const autoMatches = evaluateAutoDeleteRules(data.emails);
+        if (autoMatches.matchedEmailIds.length > 0) {
+          runAutoClean(autoMatches);
+        }
       } else {
         setNextPageToken(undefined);
         showToast('All available emails have been fetched', 'info');
@@ -418,6 +482,9 @@ export default function DashboardPage() {
         fetchLimit={fetchLimit}
         onFetchLimitChange={handleFetchLimitChange}
         emailCount={emails.length}
+        onOpenWizard={() => setIsWizardOpen(true)}
+        onOpenAutoRules={() => setIsAutoRulesOpen(true)}
+        autoRulesCount={autoRulesCount}
       />
 
       {/* Main Content Area */}
@@ -477,6 +544,11 @@ export default function DashboardPage() {
                 nextPageToken={nextPageToken}
                 onLoadMore={handleLoadMore}
                 isLoadingMore={isLoadingMore}
+                fetchLimit={fetchLimit}
+                onFetchLimitChange={handleFetchLimitChange}
+                onOpenWizard={() => setIsWizardOpen(true)}
+                onOpenAutoRules={() => setIsAutoRulesOpen(true)}
+                autoRulesCount={autoRulesCount}
               />
             )}
 
@@ -539,6 +611,24 @@ export default function DashboardPage() {
         oauthConfigured={oauthConfigured}
         dbConfigured={dbConfigured}
         hibpConfigured={hibpConfigured}
+      />
+
+      {/* Step-by-Step Onboarding Cleaning Wizard Modal */}
+      <CleaningWizardModal
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        emails={emails}
+        onBatchTrash={handleBatchTrash}
+        onUnsubscribe={handleUnsubscribe}
+        onRefreshInbox={() => loadDashboardData(true)}
+        onAutoRulesUpdated={refreshAutoRulesCount}
+      />
+
+      {/* Auto-Delete Rules Modal */}
+      <AutoRulesModal
+        isOpen={isAutoRulesOpen}
+        onClose={() => setIsAutoRulesOpen(false)}
+        onRulesChanged={refreshAutoRulesCount}
       />
     </div>
   );

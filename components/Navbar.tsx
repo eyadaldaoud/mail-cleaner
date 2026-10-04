@@ -11,6 +11,7 @@ import {
   Sparkles,
   HelpCircle,
   ChevronDown,
+  Zap,
 } from 'lucide-react';
 import { AuthSession } from '@/lib/types';
 
@@ -25,6 +26,9 @@ interface NavbarProps {
   fetchLimit: number;
   onFetchLimitChange: (limit: number) => void;
   emailCount: number;
+  onOpenWizard?: () => void;
+  onOpenAutoRules?: () => void;
+  autoRulesCount?: number;
 }
 
 const FETCH_LIMIT_OPTIONS = [100, 250, 500, 1000];
@@ -40,6 +44,9 @@ export function Navbar({
   fetchLimit,
   onFetchLimitChange,
   emailCount,
+  onOpenWizard,
+  onOpenAutoRules,
+  autoRulesCount = 0,
 }: NavbarProps) {
   const [limitOpen, setLimitOpen] = useState(false);
 
@@ -130,6 +137,18 @@ export function Navbar({
                 </div>
               )}
             </div>
+
+            {/* Clean Wizard Button */}
+            {onOpenWizard && (
+              <button
+                onClick={onOpenWizard}
+                className="flex items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-indigo-600/30 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 hover:brightness-110 transition"
+                title="Launch step-by-step cleaning wizard"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-300 animate-pulse" />
+                <span className="hidden sm:inline">Clean Wizard</span>
+              </button>
+            )}
 
             {/* Sync Button */}
             <button
