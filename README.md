@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MailCleaner — Smart Gmail Inbox Cleaner
+
+> Bulk-clean your Gmail inbox in seconds. Unsubscribe, trash by category, and set auto-delete rules — all from a fast, private dashboard.
+
+---
+
+## Features
+
+- **Inbox Cleaner** — scan up to 1 000 emails, filter by category (heavy files, ancient mail, mass notifications, etc.) and trash in bulk.
+- **1-Click Unsubscribe** — detect and fire unsubscribe links for mailing lists without leaving the app.
+- **Cleaning Wizard** — step-by-step guided flow that walks you through every email category with trash / unsubscribe / keep actions.
+- **Auto-Delete Rules** — save patterns from the wizard so future email batches are automatically cleaned on the next sync.
+- **Blocklist** — permanently block senders so they never clutter your inbox again.
+- **Digital Footprint** *(coming soon)* — account breach inspection and password hygiene tools.
+
+---
+
+## Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 15 (App Router) |
+| Auth | Google OAuth 2.0 |
+| Database | Supabase (Postgres) |
+| Styling | Tailwind CSS |
+| Email API | Gmail REST API |
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone & install
+
+```bash
+git clone https://github.com/your-org/mail-cleaner.git
+cd mail-cleaner
+npm install
+```
+
+### 2. Configure environment variables
+
+Copy the example file and fill in your credentials:
+
+```bash
+cp .env.example .env.local
+```
+
+Required variables are documented in [`.env.example`](.env.example).
+
+### 3. Run locally
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deployment
 
-## Learn More
+The easiest deployment target is [Vercel](https://vercel.com). Push to your connected repository and set the environment variables in the Vercel dashboard — no extra configuration needed.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Privacy
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- No email content is stored; only metadata (sender, size, date, flags) is processed.
+- OAuth tokens are stored server-side in Supabase and never exposed to the client.
+- Auto-delete rules are stored in `localStorage` on the user's device only.

@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MailCleaner | Inbox Optimization & Digital Footprint Hub",
+  title: "MailCleaner — Smart Gmail Inbox Cleaner",
   description:
-    "Private, high-performance personal dashboard for bulk Gmail cleaning, automated 1-click unsubscribing, Have I Been Pwned breach inspection, and Chrome password account discovery.",
+    "Bulk clean your Gmail inbox in seconds. Auto-unsubscribe from mailing lists, trash heavy and old emails by category, and set auto-delete rules. Fast, private, and free to try.",
 };
 
 export default function RootLayout({

@@ -93,12 +93,13 @@ export function KpiMetrics({
     {
       id: 'osint_breached',
       title: 'Digital Footprint',
-      value: accounts.length > 0 ? accounts.length.toLocaleString() : 'Ready',
-      subtext: totalBreached > 0 ? `${totalBreached} compromised` : 'Password CSV & HIBP',
+      value: 'Soon',
+      subtext: 'Feature coming soon',
       icon: AlertTriangle,
       gradient: 'from-rose-500/20 to-red-500/10',
       border: 'border-rose-500/30',
       iconColor: 'text-rose-400',
+      comingSoon: true,
     },
   ];
 
@@ -107,14 +108,18 @@ export function KpiMetrics({
       {cards.map((c) => {
         const Icon = c.icon;
         const isSelected = activeFilter === c.id;
+        const coming = (c as { comingSoon?: boolean }).comingSoon;
         return (
           <button
             key={c.id}
-            onClick={() => onSelectFilter(c.id)}
-            className={`text-left rounded-xl p-3.5 transition-all relative overflow-hidden group cursor-pointer ${
-              isSelected
-                ? 'bg-slate-800/90 ring-2 ring-indigo-500 shadow-lg shadow-indigo-500/10'
-                : 'bg-slate-900/40 hover:bg-slate-800/60 border border-slate-800 hover:border-slate-700'
+            onClick={() => !coming && onSelectFilter(c.id)}
+            disabled={coming}
+            className={`text-left rounded-xl p-3.5 transition-all relative overflow-hidden group ${
+              coming
+                ? 'cursor-not-allowed opacity-50 bg-slate-900/40 border border-slate-800'
+                : isSelected
+                ? 'cursor-pointer bg-slate-800/90 ring-2 ring-indigo-500 shadow-lg shadow-indigo-500/10'
+                : 'cursor-pointer bg-slate-900/40 hover:bg-slate-800/60 border border-slate-800 hover:border-slate-700'
             }`}
           >
             {/* Ambient subtle glow background */}
@@ -136,6 +141,12 @@ export function KpiMetrics({
             <div className="text-[11px] text-slate-400 truncate">
               {c.subtext}
             </div>
+
+            {coming && (
+              <span className="absolute top-2 right-2 rounded-md bg-slate-700/80 px-1 py-0.5 text-[8px] font-bold tracking-wider text-slate-400 uppercase">
+                Soon
+              </span>
+            )}
           </button>
         );
       })}

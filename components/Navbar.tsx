@@ -51,10 +51,10 @@ export function Navbar({
   const [limitOpen, setLimitOpen] = useState(false);
 
   const tabs = [
-    { id: 'cleaner', label: 'Cleaner', icon: Mail },
-    { id: 'unsubscriber', label: 'Unsubscribe', icon: Shield },
-    { id: 'osint', label: 'Digital Footprint', icon: KeyRound },
-    { id: 'blocklist', label: 'Blocklist', icon: Database },
+    { id: 'cleaner', label: 'Cleaner', icon: Mail, comingSoon: false },
+    { id: 'unsubscriber', label: 'Unsubscribe', icon: Shield, comingSoon: false },
+    { id: 'osint', label: 'Digital Footprint', icon: KeyRound, comingSoon: true },
+    { id: 'blocklist', label: 'Blocklist', icon: Database, comingSoon: false },
   ] as const;
 
   return (
@@ -83,18 +83,28 @@ export function Navbar({
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
+              const disabled = tab.comingSoon;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                    isActive
+                  onClick={() => !disabled && setActiveTab(tab.id)}
+                  disabled={disabled}
+                  title={disabled ? 'Coming Soon' : tab.label}
+                  className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                    disabled
+                      ? 'cursor-not-allowed text-slate-600 opacity-60'
+                      : isActive
                       ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
-                  <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-cyan-300' : 'text-slate-500'}`} />
+                  <Icon className={`h-3.5 w-3.5 ${isActive && !disabled ? 'text-cyan-300' : 'text-slate-500'}`} />
                   <span>{tab.label}</span>
+                  {disabled && (
+                    <span className="ml-0.5 rounded-md bg-slate-700/80 px-1 py-0.5 text-[8px] font-bold tracking-wider text-slate-400 uppercase">
+                      Soon
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -221,16 +231,27 @@ export function Navbar({
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
+            const disabled = tab.comingSoon;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => !disabled && setActiveTab(tab.id)}
+                disabled={disabled}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${
-                  isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'
+                  disabled
+                    ? 'cursor-not-allowed text-slate-600 opacity-50'
+                    : isActive
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-400 hover:bg-slate-800'
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span>{tab.label}</span>
+                {disabled && (
+                  <span className="rounded-md bg-slate-700/80 px-1 py-0.5 text-[8px] font-bold tracking-wider text-slate-400 uppercase">
+                    Soon
+                  </span>
+                )}
               </button>
             );
           })}
