@@ -43,7 +43,7 @@ export async function fetchEmailsMetadata({
   const session = await getSessionCookie();
   const gmail = await getAuthenticatedGmailClient();
 
-  if (!gmail || !session || session.isDemo) {
+  if (session?.isDemo) {
     // Simulate demo progress
     const filteredMock = MOCK_EMAILS.filter((e) => !demoDeletedIds.has(e.id));
     onProgress?.({ phase: 'demo', fetched: filteredMock.length, target: filteredMock.length, message: 'Loaded demo data' });
@@ -51,6 +51,15 @@ export async function fetchEmailsMetadata({
       emails: filteredMock,
       isDemo: true,
       totalFetched: filteredMock.length,
+    };
+  }
+
+  if (!gmail || !session) {
+    return {
+      emails: [],
+      isDemo: false,
+      totalFetched: 0,
+      apiError: 'Not authenticated with Gmail',
     };
   }
 
@@ -199,15 +208,26 @@ export async function fetchEmailsMetadata({
       };
     }
 
-    // Fallback to mock data only for pure demo or disabled API
-    const filteredMock = MOCK_EMAILS.filter((e) => !demoDeletedIds.has(e.id));
+    // Fallback to mock data only for pure demo
+    if (session?.isDemo) {
+      const filteredMock = MOCK_EMAILS.filter((e) => !demoDeletedIds.has(e.id));
+      return {
+        emails: filteredMock,
+        isDemo: true,
+        totalFetched: filteredMock.length,
+        apiError: errorMsg,
+        isApiDisabled,
+        enableApiUrl: 'https://console.developers.google.com/apis/api/gmail.googleapis.com/overview',
+      };
+    }
+
     return {
-      emails: filteredMock,
-      isDemo: true,
-      totalFetched: filteredMock.length,
+      emails: [],
+      isDemo: false,
+      totalFetched: 0,
       apiError: errorMsg,
       isApiDisabled,
-      enableApiUrl: 'https://console.developers.google.com/apis/api/gmail.googleapis.com/overview',
+      enableApiUrl: isApiDisabled ? 'https://console.developers.google.com/apis/api/gmail.googleapis.com/overview' : undefined,
     };
   }
 }
@@ -235,11 +255,15 @@ export async function batchTrashEmails(messageIds: string[]): Promise<{
     userEmailCache.set(session.email, cached);
   }
 
-  if (!gmail || !session || session.isDemo) {
+  if (session?.isDemo) {
     for (const id of messageIds) {
       demoDeletedIds.add(id);
     }
     return { success: true, count: messageIds.length, isDemo: true };
+  }
+
+  if (!gmail || !session) {
+    return { success: false, count: 0, isDemo: false };
   }
 
   try {
@@ -325,13 +349,22 @@ export async function executeUnsubscribe(options: UnsubscribeOptions): Promise<{
     const session = await getSessionCookie();
     const gmail = await getAuthenticatedGmailClient();
 
-    if (!gmail || !session || session.isDemo) {
+    if (session?.isDemo) {
       // In demo mode, simulate sending silent email
       return {
         success: true,
         methodUsed: 'mailto',
         target: options.mailto.address,
         message: `Simulated silent unsubscribe email sent to ${options.mailto.address} (Demo Mode).`,
+      };
+    }
+
+    if (!gmail || !session) {
+      return {
+        success: false,
+        methodUsed: 'mailto',
+        target: options.mailto.address,
+        message: 'Authentication required to send unsubscribe email.',
       };
     }
 

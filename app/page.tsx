@@ -8,6 +8,7 @@ import { UnsubscriberTab } from '@/components/UnsubscriberTab';
 import { OsintTab } from '@/components/OsintTab';
 import { BlocklistTab } from '@/components/BlocklistTab';
 import { SetupGuideModal } from '@/components/SetupGuideModal';
+import { SetupWizard } from '@/components/SetupWizard';
 import { FetchProgress, FetchProgressState } from '@/components/FetchProgress';
 import { CleaningWizardModal } from '@/components/CleaningWizardModal';
 import { AutoRulesModal } from '@/components/AutoRulesModal';
@@ -29,13 +30,14 @@ import {
   AlertCircle,
   Info,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 
 export default function DashboardPage() {
   // Navigation & Filter state
   const [activeTab, setActiveTab] = useState<
-    'cleaner' | 'unsubscriber' | 'osint' | 'blocklist'
-  >('cleaner');
+    'cleaner' | 'unsubscriber' | 'osint' | 'blocklist' | 'setup'
+  >('setup');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -45,9 +47,9 @@ export default function DashboardPage() {
   // Data states
   const [session, setSession] = useState<AuthSession>({
     isAuthenticated: false,
-    isDemoMode: true,
-    userEmail: 'demo@mailcleaner.app',
-    userName: 'Demo Mode User',
+    isDemoMode: false,
+    userEmail: '',
+    userName: '',
   });
   const [emails, setEmails] = useState<EmailMetadata[]>([]);
   const [blockedSenders, setBlockedSenders] = useState<BlockedSenderRecord[]>([]);
@@ -148,6 +150,20 @@ export default function DashboardPage() {
       setOauthConfigured(sessionData.oauthConfigured);
       setDbConfigured(sessionData.dbConfigured);
       setHibpConfigured(sessionData.hibpConfigured);
+
+      // If user is neither authenticated nor in demo mode, do NOT stream mock emails
+      if (!sessionData.isAuthenticated && !sessionData.isDemoMode) {
+        setEmails([]);
+        setBlockedSenders([]);
+        setAccounts([]);
+        setActiveTab('setup');
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
+      // If user is active, make sure they are on an actionable dashboard tab
+      setActiveTab((prev) => (prev === 'setup' ? 'cleaner' : prev));
 
       // 2. Fetch email metadata via SSE stream for live progress
       const limit = limitOverride ?? fetchLimitRef.current;
@@ -411,19 +427,57 @@ export default function DashboardPage() {
     }
   };
 
-  // Toggle Demo Mode
-  const handleToggleDemo = async () => {
+  // Enable Demo Mode
+  const handleEnableDemo = async () => {
+    setIsLoading(true);
     try {
       await fetch('/api/auth/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'enable_demo' }),
       });
+      setActiveTab('cleaner');
       await loadDashboardData(false);
       showToast('Switched to Demo Simulator Mode', 'info');
     } catch {
       showToast('Failed to activate demo mode', 'error');
+      setIsLoading(false);
     }
+  };
+
+  // Exit Demo Mode and return to setup wizard
+  const handleExitDemo = async () => {
+    setIsLoading(true);
+    try {
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disable_demo' }),
+      });
+      setActiveTab('setup');
+      await loadDashboardData(false);
+      showToast('Exited Demo Mode — Setup Wizard active', 'info');
+    } catch {
+      showToast('Failed to exit demo mode', 'error');
+      setIsLoading(false);
+    }
+  };
+
+  // Toggle Demo Mode
+  const handleToggleDemo = async () => {
+    if (session.isDemoMode) {
+      await handleExitDemo();
+    } else {
+      await handleEnableDemo();
+    }
+  };
+
+  const handleTabChange = (tab: 'cleaner' | 'unsubscriber' | 'osint' | 'blocklist' | 'setup') => {
+    if (tab !== 'setup' && !session.isAuthenticated && !session.isDemoMode) {
+      handleEnableDemo();
+      return;
+    }
+    setActiveTab(tab);
   };
 
   // Change fetch limit preset
@@ -474,7 +528,7 @@ export default function DashboardPage() {
       <Navbar
         session={session}
         activeTab={activeTab}
-        setActiveTab={(tab) => setActiveTab(tab as 'cleaner' | 'unsubscriber' | 'osint' | 'blocklist')}
+        setActiveTab={handleTabChange}
         onRefresh={() => loadDashboardData(true)}
         isRefreshing={isRefreshing}
         onOpenGuide={() => setIsGuideOpen(true)}
@@ -488,101 +542,140 @@ export default function DashboardPage() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* API Notification Banner */}
-        {apiNotice && (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-950/40 p-4 text-xs backdrop-blur-md shadow-lg shadow-amber-950/30 animate-in fade-in">
-            <div className="flex items-start sm:items-center gap-2.5">
-              <AlertCircle className="h-5 w-5 shrink-0 text-amber-400 mt-0.5 sm:mt-0" />
-              <div>
-                <span className="font-bold text-amber-200">Action Required: </span>
-                <span className="text-amber-100">{apiNotice.message}</span>
+      {/* If active tab is 'setup' OR user is unauthenticated & not in demo mode: show Setup Wizard! */}
+      {activeTab === 'setup' || (!session.isAuthenticated && !session.isDemoMode) ? (
+        <SetupWizard
+          oauthConfigured={oauthConfigured}
+          dbConfigured={dbConfigured}
+          hibpConfigured={hibpConfigured}
+          onEnableDemo={handleEnableDemo}
+        />
+      ) : (
+        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+          {/* Demo Mode Notice Banner */}
+          {session.isDemoMode && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-950/30 p-4 text-xs backdrop-blur-md shadow-lg shadow-amber-950/20 animate-in fade-in">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
+                <div>
+                  <span className="font-bold text-amber-200">Demo Simulator Active: </span>
+                  <span className="text-amber-100/90">
+                    Browsing realistic mock email metadata. Real Gmail inbox is not connected.
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setActiveTab('setup')}
+                  className="rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition"
+                >
+                  View Setup Wizard
+                </button>
+                <button
+                  onClick={handleExitDemo}
+                  className="rounded-xl border border-amber-500/40 bg-amber-500/20 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-500/30 hover:text-white transition"
+                >
+                  Exit Demo
+                </button>
               </div>
             </div>
-            {apiNotice.link && (
-              <a
-                href={apiNotice.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 flex items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 shadow-md transition"
-              >
-                <span>{apiNotice.linkText || 'Enable Now'}</span>
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-          </div>
-        )}
+          )}
 
-        {/* KPI Metrics Dashboard Bar */}
-        <KpiMetrics
-          emails={emails}
-          accounts={accounts}
-          activeFilter={activeFilter}
-          onSelectFilter={handleSelectKpiFilter}
-        />
+          {/* API Notification Banner */}
+          {apiNotice && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-950/40 p-4 text-xs backdrop-blur-md shadow-lg shadow-amber-950/30 animate-in fade-in">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <AlertCircle className="h-5 w-5 shrink-0 text-amber-400 mt-0.5 sm:mt-0" />
+                <div>
+                  <span className="font-bold text-amber-200">Action Required: </span>
+                  <span className="text-amber-100">{apiNotice.message}</span>
+                </div>
+              </div>
+              {apiNotice.link && (
+                <a
+                  href={apiNotice.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 flex items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 shadow-md transition"
+                >
+                  <span>{apiNotice.linkText || 'Enable Now'}</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+          )}
 
-        {/* Tab Viewport */}
-        {isLoading ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/30">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
-            <p className="text-xs font-medium text-slate-400">
-              Analyzing inbox metadata & syncing Supabase database...
-            </p>
-          </div>
-        ) : (
-          <div>
-            {activeTab === 'cleaner' && (
-              <InboxCleanerTab
-                emails={emails}
-                blockedSenders={blockedSenders}
-                onBatchTrash={handleBatchTrash}
-                onUnsubscribe={handleUnsubscribe}
-                onBlockSender={handleBlockSender}
-                isProcessing={isProcessing}
-                activeFilter={activeFilter}
-                setActiveFilter={setActiveFilter}
-                nextPageToken={nextPageToken}
-                onLoadMore={handleLoadMore}
-                isLoadingMore={isLoadingMore}
-                fetchLimit={fetchLimit}
-                onFetchLimitChange={handleFetchLimitChange}
-                onOpenWizard={() => setIsWizardOpen(true)}
-                onOpenAutoRules={() => setIsAutoRulesOpen(true)}
-                autoRulesCount={autoRulesCount}
-              />
-            )}
+          {/* KPI Metrics Dashboard Bar */}
+          <KpiMetrics
+            emails={emails}
+            accounts={accounts}
+            activeFilter={activeFilter}
+            onSelectFilter={handleSelectKpiFilter}
+          />
 
-            {activeTab === 'unsubscriber' && (
-              <UnsubscriberTab
-                emails={emails}
-                blockedSenders={blockedSenders}
-                onUnsubscribe={handleUnsubscribe}
-                onBlockSender={handleBlockSender}
-                onBatchTrash={handleBatchTrash}
-              />
-            )}
+          {/* Tab Viewport */}
+          {isLoading ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/30">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+              <p className="text-xs font-medium text-slate-400">
+                Analyzing inbox metadata & syncing Supabase database...
+              </p>
+            </div>
+          ) : (
+            <div>
+              {activeTab === 'cleaner' && (
+                <InboxCleanerTab
+                  emails={emails}
+                  blockedSenders={blockedSenders}
+                  onBatchTrash={handleBatchTrash}
+                  onUnsubscribe={handleUnsubscribe}
+                  onBlockSender={handleBlockSender}
+                  isProcessing={isProcessing}
+                  activeFilter={activeFilter}
+                  setActiveFilter={setActiveFilter}
+                  nextPageToken={nextPageToken}
+                  onLoadMore={handleLoadMore}
+                  isLoadingMore={isLoadingMore}
+                  fetchLimit={fetchLimit}
+                  onFetchLimitChange={handleFetchLimitChange}
+                  onOpenWizard={() => setIsWizardOpen(true)}
+                  onOpenAutoRules={() => setIsAutoRulesOpen(true)}
+                  autoRulesCount={autoRulesCount}
+                />
+              )}
 
-            {activeTab === 'osint' && (
-              <OsintTab
-                accounts={accounts}
-                onSaveDiscoveredAccounts={handleSaveDiscoveredAccounts}
-                onUpdateAccountStatus={handleUpdateAccountStatus}
-                userEmail={session.userEmail}
-                isSaving={isProcessing}
-              />
-            )}
+              {activeTab === 'unsubscriber' && (
+                <UnsubscriberTab
+                  emails={emails}
+                  blockedSenders={blockedSenders}
+                  onUnsubscribe={handleUnsubscribe}
+                  onBlockSender={handleBlockSender}
+                  onBatchTrash={handleBatchTrash}
+                />
+              )}
 
-            {activeTab === 'blocklist' && (
-              <BlocklistTab
-                blockedSenders={blockedSenders}
-                onAddBlockedSender={handleBlockSender}
-                onRemoveBlockedSender={handleRemoveBlockedSender}
-                isProcessing={isProcessing}
-              />
-            )}
-          </div>
-        )}
-      </main>
+              {activeTab === 'osint' && (
+                <OsintTab
+                  accounts={accounts}
+                  onSaveDiscoveredAccounts={handleSaveDiscoveredAccounts}
+                  onUpdateAccountStatus={handleUpdateAccountStatus}
+                  userEmail={session.userEmail}
+                  isSaving={isProcessing}
+                />
+              )}
+
+              {activeTab === 'blocklist' && (
+                <BlocklistTab
+                  blockedSenders={blockedSenders}
+                  onAddBlockedSender={handleBlockSender}
+                  onRemoveBlockedSender={handleRemoveBlockedSender}
+                  isProcessing={isProcessing}
+                />
+              )}
+            </div>
+          )}
+        </main>
+      )}
 
       {/* Toast Notification Banner — bottom right */}
       {toast && (

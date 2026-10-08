@@ -15,10 +15,12 @@ import {
 } from 'lucide-react';
 import { AuthSession } from '@/lib/types';
 
+export type ActiveTabType = 'cleaner' | 'unsubscriber' | 'osint' | 'blocklist' | 'setup';
+
 interface NavbarProps {
   session: AuthSession;
-  activeTab: 'cleaner' | 'unsubscriber' | 'osint' | 'blocklist';
-  setActiveTab: (tab: 'cleaner' | 'unsubscriber' | 'osint' | 'blocklist') => void;
+  activeTab: ActiveTabType;
+  setActiveTab: (tab: ActiveTabType) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
   onOpenGuide: () => void;
@@ -51,11 +53,12 @@ export function Navbar({
   const [limitOpen, setLimitOpen] = useState(false);
 
   const tabs = [
-    { id: 'cleaner', label: 'Cleaner', icon: Mail, comingSoon: false },
-    { id: 'unsubscriber', label: 'Unsubscribe', icon: Shield, comingSoon: false },
-    { id: 'osint', label: 'Digital Footprint', icon: KeyRound, comingSoon: true },
-    { id: 'blocklist', label: 'Blocklist', icon: Database, comingSoon: false },
-  ] as const;
+    { id: 'setup' as const, label: 'Setup Guide', icon: Sparkles, comingSoon: false },
+    { id: 'cleaner' as const, label: 'Cleaner', icon: Mail, comingSoon: false },
+    { id: 'unsubscriber' as const, label: 'Unsubscribe', icon: Shield, comingSoon: false },
+    { id: 'osint' as const, label: 'Digital Footprint', icon: KeyRound, comingSoon: true },
+    { id: 'blocklist' as const, label: 'Blocklist', icon: Database, comingSoon: false },
+  ];
 
   return (
     <header className="sticky top-0 z-40 bg-[#090d16]/90 backdrop-blur-xl border-b border-slate-800/80 shadow-lg shadow-black/30">
@@ -206,14 +209,32 @@ export function Navbar({
                   <LogOut className="h-3.5 w-3.5" />
                 </a>
               </div>
+            ) : session.isDemoMode ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={onToggleDemo}
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 px-2.5 py-1.5 text-xs font-semibold text-amber-300 transition"
+                  title="Exit demo mode"
+                >
+                  <Sparkles className="h-3 w-3 text-amber-400" />
+                  <span>Demo (Exit)</span>
+                </button>
+                <a
+                  href="/api/auth/google"
+                  className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/30 hover:brightness-110 transition"
+                >
+                  <span>Connect Gmail</span>
+                </a>
+              </div>
             ) : (
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={onToggleDemo}
-                  className="flex items-center gap-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 transition"
+                  className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition"
+                  title="Explore with sample demo data"
                 >
                   <Sparkles className="h-3 w-3 text-amber-400" />
-                  <span>Demo</span>
+                  <span>Try Demo</span>
                 </button>
                 <a
                   href="/api/auth/google"

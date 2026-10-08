@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getSessionCookie,
   setSessionCookie,
+  clearSessionCookie,
   isGoogleOAuthConfigured,
 } from '@/lib/gmail/oauth';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -14,11 +15,14 @@ export async function GET() {
     process.env.HIBP_API_KEY && !process.env.HIBP_API_KEY.includes('your-')
   );
 
+  const isAuthenticated = Boolean(session && !session.isDemo);
+  const isDemoMode = Boolean(session?.isDemo);
+
   return NextResponse.json({
-    isAuthenticated: Boolean(session && !session.isDemo),
-    isDemoMode: Boolean(!session || session.isDemo),
-    userEmail: session?.email || 'demo@mailcleaner.app',
-    userName: session?.name || (session?.isDemo ? 'Demo Mode User' : 'Inbox Cleaner'),
+    isAuthenticated,
+    isDemoMode,
+    userEmail: session?.email || (isDemoMode ? 'demo@mailcleaner.app' : ''),
+    userName: session?.name || (isDemoMode ? 'Demo Mode User' : ''),
     userPicture: session?.picture || null,
     oauthConfigured,
     dbConfigured,
@@ -39,6 +43,11 @@ export async function POST(request: NextRequest) {
         isDemo: true,
       });
       return NextResponse.json({ success: true, isDemo: true });
+    }
+
+    if (action === 'disable_demo' || action === 'exit_demo') {
+      await clearSessionCookie();
+      return NextResponse.json({ success: true, isDemo: false });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
